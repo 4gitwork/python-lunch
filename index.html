@@ -1,11 +1,594 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>POS收銀系統-進階互動(可編輯產品/多付款/語音開關)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 20px;}
+        .pos-container {max-width: 1400px; margin: 0 auto; background: white; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden;}
+        .header {background: linear-gradient(45deg, #2c3e50, #34495e); color: white; padding: 20px 30px; display: flex; justify-content: space-between; align-items: center;}
+        .logo { font-size: 24px; font-weight: bold;}
+        .datetime { font-size: 14px; opacity: 0.9;}
+        .main-content { display: grid; grid-template-columns: 2fr 1fr; gap: 0; min-height: 80vh;}
+        .left-panel { padding: 30px; background: #f8f9fa;}
+        .right-panel { background: white; border-left: 1px solid #e0e0e0; display: flex; flex-direction: column;}
+        .products-section h2 { color: #2c3e50; margin-bottom: 20px; font-size: 20px;}
+        .product-categories { display: flex; gap: 10px; margin-bottom: 20px;}
+        .category-btn { padding: 8px 16px; border: 2px solid #3498db; background: white; color: #3498db; border-radius: 25px; cursor: pointer; transition: all 0.3s; font-size: 14px;}
+        .category-btn.active, .category-btn:hover { background: #3498db; color: white;}
+        .product-search-box { margin-bottom: 15px;}
+        .product-search-box input { width: 70%; padding: 8px 12px; border: 1.5px solid #bbb; border-radius: 20px; font-size: 15px; outline: none; transition: border 0.2s;}
+        .product-search-box input:focus { border: 1.5px solid #3498db;}
+        .products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;}
+        .product-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); position: relative; transition: all 0.3s; border: 2px solid transparent;}
+        .product-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); border-color: #3498db;}
+        .product-name { font-weight: bold; color: #2c3e50; margin-bottom: 8px; font-size: 16px;}
+        .product-price { color: #e74c3c; font-size: 18px; font-weight: bold; margin-bottom: 8px;}
+        .product-stock { font-size: 12px; color: #7f8c8d;}
+        .stock-low { color: #e74c3c;}
+        .stock-out { color: #c0392b; font-weight: bold;}
+        .product-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px;}
+        .edit-btn, .del-btn { background: #fff; border: 1px solid #bbb; border-radius: 5px; padding: 2px 8px; font-size: 13px; cursor: pointer;}
+        .edit-btn:hover { background: #f1c40f; color: #fff; border-color: #f1c40f;}
+        .del-btn:hover { background: #e74c3c; color: #fff; border-color: #e74c3c;}
+        .add-product-btn { margin-bottom: 18px; background: #27ae60; color: #fff; border: none; border-radius: 20px; padding: 8px 24px; cursor: pointer; font-size: 16px;}
+        .add-product-btn:hover { background: #219150;}
+        .cart-section { padding: 30px; flex: 1;}
+        .cart-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; color: #2c3e50;}
+        .cart-items { max-height: 300px; overflow-y: auto; margin-bottom: 20px;}
+        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border: 1px solid #ecf0f1; border-radius: 10px; margin-bottom: 10px; background: #f8f9fa; cursor: grab;}
+        .cart-item.dragging { opacity: 0.4;}
+        .item-info { flex: 1; cursor: grab;}
+        .item-name { font-weight: bold; color: #2c3e50;}
+        .item-price { color: #7f8c8d; font-size: 14px;}
+        .quantity-controls { display: flex; align-items: center; gap: 10px;}
+        .qty-btn { width: 30px; height: 30px; border: none; background: #3498db; color: white; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;}
+        .qty-btn:hover { background: #2980b9;}
+        .quantity { font-weight: bold; min-width: 30px; text-align: center;}
+        .remove-btn { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;}
+        .remove-btn:hover { background: #c0392b;}
+        .subtotal-section { padding: 20px 30px; border-top: 2px solid #ecf0f1; background: #f8f9fa;}
+        .subtotal-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 16px;}
+        .total-row { display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; color: #2c3e50; border-top: 2px solid #bdc3c7; padding-top: 10px; margin-top: 10px;}
+        .discount-applied { color: #27ae60;}
+        .member-section { padding: 20px 30px; border-top: 2px solid #ecf0f1; background: white;}
+        .member-card { background: linear-gradient(45deg, #f39c12, #e67e22); color: white; padding: 20px; border-radius: 15px; margin-bottom: 15px;}
+        .member-info { display: flex; justify-content: space-between; align-items: center;}
+        .member-name { font-size: 18px; font-weight: bold;}
+        .member-level { background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 15px; font-size: 12px;}
+        .member-details { margin-top: 10px; font-size: 14px; opacity: 0.9;}
+        .member-login { text-align: center; color: #7f8c8d; padding: 20px;}
+        .login-btn { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; margin-top: 10px;}
+        .login-btn:hover { background: #2980b9;}
+        .promotions-section { padding: 20px 30px; border-top: 2px solid #ecf0f1; background: #f8f9fa;}
+        .promotion-item { background: linear-gradient(45deg, #e74c3c, #c0392b); color: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; animation: pulse 2s infinite;}
+        .promotion-title { font-weight: bold; margin-bottom: 5px;}
+        .promotion-desc { font-size: 12px; opacity: 0.9;}
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7);} 70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0);} 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);}}
+        .checkout-section { padding: 20px 30px; background: white;}
+        .checkout-btn { width: 100%; background: linear-gradient(45deg, #27ae60, #2ecc71); color: white; border: none; padding: 15px; font-size: 18px; font-weight: bold; border-radius: 10px; cursor: pointer; transition: all 0.3s;}
+        .checkout-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3);}
+        .checkout-btn:disabled { background: #bdc3c7; cursor: not-allowed; transform: none; box-shadow: none;}
+        .empty-cart { text-align: center; color: #7f8c8d; padding: 40px 20px;}
+        .empty-cart-icon { font-size: 48px; margin-bottom: 15px; opacity: 0.5;}
+        /* 付款方式按鈕 */
+        .payment-methods { display: flex; gap: 10px; margin: 15px 0;}
+        .pay-method-btn { padding: 8px 16px; border-radius: 18px; border: 2px solid #34495e; background: white; color: #34495e; cursor: pointer; font-size: 15px;}
+        .pay-method-btn.active, .pay-method-btn:hover { background: #34495e; color: #fff;}
+        /* 列印專用樣式 */
+        @media print { body * { visibility: hidden !important;} #print-area, #print-area * { visibility: visible !important;} #print-area { position: absolute; left: 0; top: 0; width: 100vw; background: white;}}
+        /* Modal */
+        .modal-bg { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center; z-index: 99;}
+        .modal { background: #fff; border-radius: 12px; padding: 24px; min-width: 340px; box-shadow: 0 8px 32px rgba(0,0,0,0.21);}
+        .modal label { display: block; margin-bottom: 5px;}
+        .modal input, .modal select { width: 100%; padding: 8px 10px; margin-bottom: 14px; border: 1.2px solid #bbb; border-radius: 6px;}
+        .modal-actions { text-align: right;}
+        .modal-actions button { margin-left: 10px; padding: 7px 18px; border-radius: 8px; border: none; font-size: 15px;}
+        .modal-actions .cancel-btn { background: #bdc3c7; color: #fff;}
+        .modal-actions .ok-btn { background: #27ae60; color: #fff;}
+        /* 語音開關 */
+        .speech-toggle { position: absolute; right: 35px; top: 20px; z-index: 10;}
+        .speech-toggle label { font-size: 15px; color: #fff; background: #27ae60; border-radius: 12px; padding: 3px 14px; cursor: pointer;}
+        .speech-toggle input[type="checkbox"] { margin-right: 5px;}
+        @media (max-width: 768px) { .main-content { grid-template-columns: 1fr;} .products-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));} .pos-container { margin: 10px; border-radius: 10px;}}
+    </style>
 </head>
 <body>
-    watch me
+    <div class="pos-container">
+        <div class="header">
+            <div class="logo">🏪 POS收銀系統</div>
+            <div class="speech-toggle">
+                <label><input type="checkbox" id="speechSwitch" checked>語音提示</label>
+            </div>
+            <div class="datetime" id="datetime"></div>
+        </div>
+        <div class="main-content">
+            <!-- 左側：產品選擇區域 -->
+            <div class="left-panel">
+                <div class="products-section">
+                    <h2>📦 產品選擇</h2>
+                    <button class="add-product-btn" onclick="showProductModal()">＋ 新增商品</button>
+                    <div class="product-categories">
+                        <button class="category-btn active" onclick="filterProducts('all', event)">全部</button>
+                        <button class="category-btn" onclick="filterProducts('飲品', event)">飲品</button>
+                        <button class="category-btn" onclick="filterProducts('甜點', event)">甜點</button>
+                        <button class="category-btn" onclick="filterProducts('主食', event)">主食</button>
+                        <button class="category-btn" onclick="filterProducts('小食', event)">小食</button>
+                    </div>
+                    <div class="product-search-box">
+                        <input type="text" id="barcodeInput" placeholder="請掃條碼或輸入商品關鍵字">
+                    </div>
+                    <div class="products-grid" id="productsGrid"></div>
+                </div>
+            </div>
+            <!-- 右側：購物車和其他資訊 -->
+            <div class="right-panel">
+                <div class="cart-section">
+                    <div class="cart-header">
+                        <span>🛒</span>
+                        <h3>購物車</h3>
+                        <span id="cartCount">(0)</span>
+                    </div>
+                    <div class="cart-items" id="cartItems"></div>
+                </div>
+                <div class="subtotal-section">
+                    <div class="subtotal-row">
+                        <span>小計：</span>
+                        <span id="subtotal">NT$0</span>
+                    </div>
+                    <div class="subtotal-row">
+                        <span>折扣：</span>
+                        <span id="discount" class="discount-applied">-NT$0</span>
+                    </div>
+                    <div class="subtotal-row">
+                        <span>稅金：</span>
+                        <span id="tax">NT$0</span>
+                    </div>
+                    <div class="total-row">
+                        <span>總計：</span>
+                        <span id="total">NT$0</span>
+                    </div>
+                </div>
+                <div class="payment-methods">
+                    <button class="pay-method-btn active" onclick="selectPayment('現金', this)">現金</button>
+                    <button class="pay-method-btn" onclick="selectPayment('禮券', this)">禮券</button>
+                    <button class="pay-method-btn" onclick="selectPayment('信用卡', this)">信用卡</button>
+                </div>
+                <div class="member-section">
+                    <h4>👤 會員資訊</h4>
+                    <div id="memberInfo">
+                        <div class="member-login">
+                            <p>尚未登入會員</p>
+                            <button class="login-btn" onclick="loginMember()">會員登入</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="promotions-section">
+                    <h4>🎉 優惠活動</h4>
+                    <div id="promotions"></div>
+                </div>
+                <div class="checkout-section">
+                    <button class="checkout-btn" id="checkoutBtn" onclick="checkout()" disabled>💳 結帳付款</button>
+                    <button class="checkout-btn" style="margin-top:10px;background:#34495e;" onclick="printReceipt()">🖨️ 列印明細</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="print-area" style="display:none;">
+        <h2>POS 購物明細</h2>
+        <div id="print-cart-list"></div>
+        <div id="print-total"></div>
+        <p style="margin-top:20px;">感謝您的消費！</p>
+    </div>
+    <!-- Modal -->
+    <div id="modalBg" class="modal-bg" style="display:none;">
+        <div id="modal" class="modal"></div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    <script>
+        // 產品數據
+        let products = [
+            { id: 1, name: '經典美式咖啡', price: 120, stock: 25, category: '飲品' },
+            { id: 2, name: '拿鐵咖啡', price: 150, stock: 18, category: '飲品' },
+            { id: 3, name: '卡布奇諾', price: 140, stock: 20, category: '飲品' },
+            { id: 4, name: '巧克力蛋糕', price: 180, stock: 8, category: '甜點' },
+            { id: 5, name: '起司蛋糕', price: 200, stock: 5, category: '甜點' },
+            { id: 6, name: '提拉米蘇', price: 220, stock: 3, category: '甜點' },
+            { id: 7, name: '經典漢堡', price: 280, stock: 12, category: '主食' },
+            { id: 8, name: '炸雞套餐', price: 320, stock: 15, category: '主食' },
+            { id: 9, name: '義大利麵', price: 250, stock: 10, category: '主食' },
+            { id: 10, name: '薯條', price: 80, stock: 30, category: '小食' },
+            { id: 11, name: '洋蔥圈', price: 90, stock: 20, category: '小食' },
+            { id: 12, name: '雞塊', price: 100, stock: 25, category: '小食' }
+        ];
+        let cart = [];
+        let currentMember = null;
+        let currentProductFilter = 'all';
+        let currentSearch = '';
+        let paymentMethod = '現金';
+        let speechOn = true;
+        let editingProductId = null;
+        const memberData = {
+            id: 'M001',
+            name: '王小明',
+            phone: '0912-345-678',
+            points: 1250,
+            level: 'VIP',
+            discount: 0.1
+        };
+        const promotions = [
+            { id: 1, title: '滿500送50', description: '消費滿500元即送50元折價券', active: true },
+            { id: 2, title: 'VIP會員9折', description: 'VIP會員享全品項9折優惠', active: true },
+            { id: 3, title: '買二送一', description: '飲品買二送一（限週末）', active: false }
+        ];
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            renderProducts();
+            renderPromotions();
+            updateCartDisplay();
+            document.getElementById('barcodeInput').addEventListener('input', function(e){
+                currentSearch = e.target.value.trim();
+                renderProducts(currentProductFilter, currentSearch);
+            });
+            new Sortable(document.getElementById('cartItems'), {
+                animation: 150,
+                handle: '.item-info',
+                onEnd: function (evt) {
+                    const newOrder = Array.from(document.querySelectorAll('#cartItems .cart-item')).map(el => Number(el.dataset.id));
+                    cart = newOrder.map(id => cart.find(item => item.id === id));
+                    updateCartDisplay();
+                    speak('購物車已重新排序');
+                }
+            });
+            document.getElementById('speechSwitch').addEventListener('change', function(e){
+                speechOn = e.target.checked;
+            });
+        });
+        function updateDateTime() {
+            const now = new Date();
+            const dateTimeString = now.toLocaleDateString('zh-TW') + ' ' + now.toLocaleTimeString('zh-TW');
+            document.getElementById('datetime').textContent = dateTimeString;
+        }
+        function renderProducts(filter = 'all', search = '') {
+            currentProductFilter = filter;
+            const grid = document.getElementById('productsGrid');
+            let filteredProducts = products;
+            if (filter && filter !== 'all') filteredProducts = filteredProducts.filter(p => p.category === filter);
+            if (search) filteredProducts = filteredProducts.filter(p => p.name.includes(search));
+            grid.innerHTML = filteredProducts.map(product => `
+                <div class="product-card">
+                    <div class="product-actions">
+                        <button class="edit-btn" onclick="event.stopPropagation(); editProduct(${product.id})">編輯</button>
+                        <button class="del-btn" onclick="event.stopPropagation(); delProduct(${product.id})">刪除</button>
+                    </div>
+                    <div onclick="addToCart(${product.id})">
+                        <div class="product-name">${product.name}</div>
+                        <div class="product-price">NT$${product.price}</div>
+                        <div class="product-stock ${getStockClass(product.stock)}">
+                            庫存：${product.stock}件
+                            ${product.stock <= 5 ? '⚠️' : ''}
+                            ${product.stock === 0 ? '❌' : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        function getStockClass(stock) {
+            if (stock === 0) return 'stock-out';
+            if (stock <= 5) return 'stock-low';
+            return '';
+        }
+        function filterProducts(category, event) {
+            document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('active'));
+            if (event) event.target.classList.add('active');
+            renderProducts(category, document.getElementById('barcodeInput').value.trim());
+        }
+        function addToCart(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product || product.stock <= 0) return;
+            const existingItem = cart.find(item => item.id === productId);
+            if (existingItem) {
+                if (existingItem.quantity < product.stock) {
+                    existingItem.quantity++;
+                }
+            } else {
+                cart.push({...product, quantity: 1});
+            }
+            updateCartDisplay();
+            renderProducts();
+            speak(`${product.name} 已加入購物車`);
+        }
+        function updateCartDisplay() {
+            const cartItems = document.getElementById('cartItems');
+            const cartCount = document.getElementById('cartCount');
+            if (cart.length === 0) {
+                cartItems.innerHTML = `
+                    <div class="empty-cart">
+                        <div class="empty-cart-icon">🛒</div>
+                        <p>購物車是空的</p>
+                        <p>請選擇商品加入購物車</p>
+                    </div>
+                `;
+                cartCount.textContent = '(0)';
+            } else {
+                cartItems.innerHTML = cart.map(item => `
+                    <div class="cart-item" data-id="${item.id}">
+                        <div class="item-info">
+                            <div class="item-name">${item.name}</div>
+                            <div class="item-price">NT$${item.price} x ${item.quantity}</div>
+                        </div>
+                        <div class="quantity-controls">
+                            <button class="qty-btn" onclick="updateQuantity(${item.id}, -1)">-</button>
+                            <span class="quantity">${item.quantity}</span>
+                            <button class="qty-btn" onclick="updateQuantity(${item.id}, 1)">+</button>
+                            <button class="remove-btn" onclick="removeFromCart(${item.id})">🗑️</button>
+                        </div>
+                    </div>
+                `).join('');
+                const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+                cartCount.textContent = `(${totalItems})`;
+            }
+            updateSubtotal();
+        }
+        function updateQuantity(productId, change) {
+            const item = cart.find(item => item.id === productId);
+            const product = products.find(p => p.id === productId);
+            if (item) {
+                const newQuantity = item.quantity + change;
+                if (newQuantity <= 0) {
+                    removeFromCart(productId);
+                } else if (newQuantity <= product.stock) {
+                    item.quantity = newQuantity;
+                    updateCartDisplay();
+                }
+            }
+        }
+        function removeFromCart(productId) {
+            cart = cart.filter(item => item.id !== productId);
+            updateCartDisplay();
+        }
+        function updateSubtotal() {
+            const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            let discount = 0;
+            if (currentMember && currentMember.level === 'VIP') {
+                discount = subtotal * currentMember.discount;
+            }
+            const tax = Math.round((subtotal - discount) * 0.05);
+            const total = subtotal - discount + tax;
+            document.getElementById('subtotal').textContent = `NT$${subtotal}`;
+            document.getElementById('discount').textContent = `-NT$${Math.round(discount)}`;
+            document.getElementById('tax').textContent = `NT$${tax}`;
+            document.getElementById('total').textContent = `NT$${total}`;
+            document.getElementById('checkoutBtn').disabled = cart.length === 0;
+        }
+        function loginMember() {
+            currentMember = memberData;
+            const memberInfo = document.getElementById('memberInfo');
+            memberInfo.innerHTML = `
+                <div class="member-card">
+                    <div class="member-info">
+                        <div>
+                            <div class="member-name">${currentMember.name}</div>
+                            <div class="member-details">
+                                手機：${currentMember.phone}<br>
+                                點數：<span id="points">${currentMember.points}</span>點
+                            </div>
+                        </div>
+                        <div class="member-level">${currentMember.level}</div>
+                    </div>
+                </div>
+                <button class="login-btn" onclick="logoutMember()">登出</button>
+                <button class="login-btn" onclick="redeemPoints()">用 100 點折抵 NT$10</button>
+            `;
+            updateSubtotal();
+        }
+        function logoutMember() {
+            currentMember = null;
+            const memberInfo = document.getElementById('memberInfo');
+            memberInfo.innerHTML = `
+                <div class="member-login">
+                    <p>尚未登入會員</p>
+                    <button class="login-btn" onclick="loginMember()">會員登入</button>
+                </div>
+            `;
+            updateSubtotal();
+        }
+        function redeemPoints() {
+            if (currentMember && currentMember.points >= 100) {
+                currentMember.points -= 100;
+                let extraDiscount = 10;
+                let subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                let discount = (currentMember.level === 'VIP') ? subtotal * currentMember.discount : 0;
+                document.getElementById('discount').textContent = `-NT$${Math.round(discount)+extraDiscount}`;
+                document.getElementById('points').textContent = currentMember.points;
+                speak('已使用 100 點積分折抵 NT$10');
+                const tax = Math.round((subtotal - discount - extraDiscount) * 0.05);
+                const total = subtotal - discount - extraDiscount + tax;
+                document.getElementById('tax').textContent = `NT$${tax}`;
+                document.getElementById('total').textContent = `NT$${total}`;
+            } else {
+                speak('點數不足，無法折抵');
+            }
+        }
+        function renderPromotions() {
+            const promotionsDiv = document.getElementById('promotions');
+            const activePromotions = promotions.filter(p => p.active);
+            if (activePromotions.length === 0) {
+                promotionsDiv.innerHTML = '<p style="text-align: center; color: #7f8c8d;">暫無優惠活動</p>';
+                return;
+            }
+            promotionsDiv.innerHTML = activePromotions.map(promo => `
+                <div class="promotion-item" onclick="showPromotionDetail('${promo.title}','${promo.description}')">
+                    <div class="promotion-title">${promo.title}</div>
+                    <div class="promotion-desc">${promo.description}</div>
+                </div>
+            `).join('');
+        }
+        function showPromotionDetail(title, desc) {
+            alert(`${title}\n\n${desc}`);
+            speak(`${title} 活動詳情已顯示`);
+        }
+        function selectPayment(type, btn) {
+            paymentMethod = type;
+            document.querySelectorAll('.pay-method-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            speak(`付款方式已選擇：${type}`);
+        }
+        function checkout() {
+            if (cart.length === 0) return;
+            const total = document.getElementById('total').textContent;
+            const confirmed = confirm(`確認以「${paymentMethod}」結帳？\n總金額：${total}`);
+            if (confirmed) {
+                cart.forEach(item => {
+                    const product = products.find(p => p.id === item.id);
+                    if (product) { product.stock -= item.quantity; }
+                });
+                cart = [];
+                updateCartDisplay();
+                renderProducts();
+                speak('結帳完成，感謝您的消費');
+                alert('結帳完成！感謝您的消費！');
+            }
+        }
+        function printReceipt() {
+            if (cart.length === 0) return;
+            const printCartList = document.getElementById('print-cart-list');
+            printCartList.innerHTML = `
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;border-bottom:1px solid #bbb;">商品</th>
+                            <th style="text-align:right;border-bottom:1px solid #bbb;">單價</th>
+                            <th style="text-align:right;border-bottom:1px solid #bbb;">數量</th>
+                            <th style="text-align:right;border-bottom:1px solid #bbb;">小計</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${cart.map(item => `
+                            <tr>
+                                <td>${item.name}</td>
+                                <td style="text-align:right;">NT$${item.price}</td>
+                                <td style="text-align:right;">${item.quantity}</td>
+                                <td style="text-align:right;">NT$${item.price * item.quantity}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            document.getElementById('print-total').innerHTML = document.getElementById('total').outerHTML.replace('id="total"', '');
+            document.getElementById('print-area').style.display = 'block';
+            window.print();
+            setTimeout(() => { document.getElementById('print-area').style.display = 'none'; }, 500);
+            speak('列印明細完成');
+        }
+        function speak(text) {
+            if (!speechOn) return;
+            if ('speechSynthesis' in window) {
+                const utter = new SpeechSynthesisUtterance(text);
+                utter.lang = 'zh-TW';
+                window.speechSynthesis.speak(utter);
+            }
+        }
+        // 商品 新增/編輯/刪除
+        function showProductModal(editId=null) {
+            editingProductId = editId;
+            let modal = document.getElementById('modal');
+            let modalBg = document.getElementById('modalBg');
+            let prod = {name:"", price:"", stock:"", category:"飲品"};
+            if (editId) {
+                prod = products.find(p=>p.id===editId);
+            }
+            modal.innerHTML = `
+                <h3>${editId ? '編輯商品' : '新增商品'}</h3>
+                <form id="productForm" onsubmit="submitProductForm(event)">
+                    <label>名稱</label>
+                    <input type="text" name="name" required value="${prod.name}">
+                    <label>價格 (新台幣)</label>
+                    <input type="number" name="price" required min="1" value="${prod.price}">
+                    <label>庫存</label>
+                    <input type="number" name="stock" required min="0" value="${prod.stock}">
+                    <label>分類</label>
+                    <select name="category">
+                        <option value="飲品" ${prod.category==='飲品'?'selected':''}>飲品</option>
+                        <option value="甜點" ${prod.category==='甜點'?'selected':''}>甜點</option>
+                        <option value="主食" ${prod.category==='主食'?'selected':''}>主食</option>
+                        <option value="小食" ${prod.category==='小食'?'selected':''}>小食</option>
+                    </select>
+                    <div class="modal-actions">
+                        <button type="button" class="cancel-btn" onclick="closeModal()">取消</button>
+                        <button type="submit" class="ok-btn">${editId ? '修改' : '新增'}</button>
+                    </div>
+                </form>
+            `;
+            modalBg.style.display = "flex";
+        }
+        function submitProductForm(e){
+            e.preventDefault();
+            let modalBg = document.getElementById('modalBg');
+            let f = e.target;
+            let data = {
+                name: f.name.value.trim(),
+                price: parseInt(f.price.value),
+                stock: parseInt(f.stock.value),
+                category: f.category.value
+            };
+            if (!data.name || !data.price || data.price <= 0 || data.stock < 0) {
+                alert('請輸入有效資料');
+                return;
+            }
+            if (editingProductId) {
+                let idx = products.findIndex(p=>p.id===editingProductId);
+                products[idx] = {...products[idx], ...data};
+                speak('商品已修改');
+            } else {
+                let newId = products.length ? Math.max(...products.map(p=>p.id))+1 : 1;
+                products.push({...data, id: newId});
+                speak('商品已新增');
+            }
+            renderProducts(currentProductFilter, currentSearch);
+            closeModal();
+        }
+        function closeModal() {
+            document.getElementById('modalBg').style.display = "none";
+            editingProductId = null;
+        }
+        function editProduct(id) {
+            showProductModal(id);
+        }
+        function delProduct(id) {
+            if(confirm("確定要刪除此商品？")) {
+                products = products.filter(p=>p.id!==id);
+                speak('商品已刪除');
+                renderProducts(currentProductFilter, currentSearch);
+            }
+        }
+        // 條碼偵測
+        let barcodeBuffer = "";
+        let barcodeTimer;
+        document.addEventListener('keydown', function(e) {
+            if (document.activeElement.tagName === 'INPUT') return;
+            if ((e.key >= '0' && e.key <= '9') || e.key === '-') {
+                barcodeBuffer += e.key;
+                clearTimeout(barcodeTimer);
+                barcodeTimer = setTimeout(() => {
+                    if (barcodeBuffer.length >= 4) {
+                        const product = products.find(p => p.id == barcodeBuffer || p.name.includes(barcodeBuffer));
+                        if (product) {
+                            addToCart(product.id);
+                            speak('條碼商品已加入購物車');
+                        } else {
+                            speak('未找到條碼商品');
+                        }
+                    }
+                    barcodeBuffer = "";
+                }, 300);
+            }
+        });
+    </script>
 </body>
 </html>
